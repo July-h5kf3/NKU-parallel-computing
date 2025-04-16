@@ -27,7 +27,7 @@ Byte *StringProcess(string input, int *n_byte)
 	int paddingBits = bitLength % 512;
 	if (paddingBits > 448)
 	{
-		paddingBits += 512 - (paddingBits - 448);
+		paddingBits = 512 - (paddingBits - 448);
 	}
 	else if (paddingBits < 448)
 	{
