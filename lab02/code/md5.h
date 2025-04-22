@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+#include<arm_neon.h>
 
 using namespace std;
 
@@ -42,7 +43,6 @@ typedef unsigned int bit32;
 #define G(x, y, z) (((x) & (z)) | ((y) & (~z)))
 #define H(x, y, z) ((x) ^ (y) ^ (z))
 #define I(x, y, z) ((y) ^ ((x) | (~z)))
-
 /**
  * @Rotate Left.
  *
@@ -80,3 +80,4 @@ typedef unsigned int bit32;
 }
 
 void MD5Hash(string input, bit32 *state);
+void MD5Hash_SIMD(string input[4],uint32x4_t state[4]);

@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <assert.h>
 #include <chrono>
+#include<arm_neon.h>
 
 using namespace std;
 using namespace chrono;
@@ -27,7 +28,7 @@ Byte *StringProcess(string input, int *n_byte)
 	int paddingBits = bitLength % 512;
 	if (paddingBits > 448)
 	{
-		paddingBits = 512 - (paddingBits - 448);
+		paddingBits += 512 - (paddingBits - 448);
 	}
 	else if (paddingBits < 448)
 	{
@@ -91,8 +92,9 @@ void MD5Hash(string input, bit32 *state)
 		// cout<<messageLength[i]<<endl;
 		assert(messageLength[i] == messageLength[0]);
 	}
+	
 	int n_blocks = messageLength[0] / 64;
-
+	//cout<<"paddedMessage:"<<paddedMessage<<" n_block = "<<n_blocks<<endl;
 	// bit32* state= new bit32[4];
 	state[0] = 0x67452301;
 	state[1] = 0xefcdab89;
@@ -104,13 +106,13 @@ void MD5Hash(string input, bit32 *state)
 	{
 		bit32 x[16];
 
-		// 下面的处理，在理解上较为复杂
 		for (int i1 = 0; i1 < 16; ++i1)
 		{
 			x[i1] = (paddedMessage[4 * i1 + i * 64]) |
 					(paddedMessage[4 * i1 + 1 + i * 64] << 8) |
 					(paddedMessage[4 * i1 + 2 + i * 64] << 16) |
 					(paddedMessage[4 * i1 + 3 + i * 64] << 24);
+			//cout<<"x["<<i1<<"] = "<<x[i1]<<endl; 
 		}
 
 		bit32 a = state[0], b = state[1], c = state[2], d = state[3];
@@ -217,3 +219,185 @@ void MD5Hash(string input, bit32 *state)
 	delete[] messageLength;
 }
 
+inline uint32x4_t ROTATELEFT_simd(uint32x4_t num,int n)
+{
+    return vorrq_u32(vshlq_n_u32(num,n),vshrq_n_u32(num,32-n));
+}
+
+inline uint32x4_t F_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
+{
+    return vorrq_u32(vandq_u32(x,y),vandq_u32(vmvnq_u32(x),z));
+}
+inline uint32x4_t G_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
+{
+    return vorrq_u32(vandq_u32(x,z),vandq_u32(y,vmvnq_u32(z)));
+}
+inline uint32x4_t H_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
+{
+    return veorq_u32(veorq_u32(x,y),z);
+}
+inline uint32x4_t I_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
+{
+    return veorq_u32(y,vorrq_u32(x,vmvnq_u32(z)));
+}
+
+inline void FF_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+{
+    uint32x4_t ac_vec = vdupq_n_u32(ac);
+    *a = vaddq_u32(*a,vaddq_u32(F_simd(b,c,d),vaddq_u32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = vaddq_u32(*a,b);
+}
+inline void GG_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+{
+    uint32x4_t ac_vec = vdupq_n_u32(ac);
+    *a = vaddq_u32(*a,vaddq_u32(G_simd(b,c,d),vaddq_u32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = vaddq_u32(*a,b);
+}
+inline void HH_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+{
+    uint32x4_t ac_vec = vdupq_n_u32(ac);
+    *a = vaddq_u32(*a,vaddq_u32(H_simd(b,c,d),vaddq_u32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = vaddq_u32(*a,b);    
+}
+inline void II_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+{
+    uint32x4_t ac_vec = vdupq_n_u32(ac);
+    *a = vaddq_u32(*a,vaddq_u32(I_simd(b,c,d),vaddq_u32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = vaddq_u32(*a,b);
+}
+void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
+{
+    Byte *paddedMessage[4];
+    int messageLength[4];
+    for(int i = 0;i < 4;i++)
+    {
+        paddedMessage[i] = StringProcess(input[i],&messageLength[i]);
+        assert(messageLength[i] == messageLength[0]);
+    }
+    int n_block = messageLength[0] / 64;
+    //bit32 state_begin[4] = {0x67452301,0xefcdab89,0x98badcfe,0x10325476};
+    //for(int i = 0;i < 4;i++)
+    //state[i] = {0x67452301,0xefcdab89,0x98badcfe,0x10325476};
+    state[0] = vdupq_n_u32(0x67452301);
+    state[1] = vdupq_n_u32(0xefcdab89);
+    state[2] = vdupq_n_u32(0x98badcfe);
+    state[3] = vdupq_n_u32(0x10325476);
+    for(int i = 0;i < n_block;i++)
+    {
+        uint32x4_t x[16];
+        bit32 y[4];
+        for(int i1 = 0;i1 < 16;i1++)
+        {
+            for(int j = 0;j < 4;j++)
+            {
+                y[j] =  (paddedMessage[j][4 * i1 + i * 64]) |
+					(paddedMessage[j][4 * i1 + 1 + i * 64] << 8) |
+					(paddedMessage[j][4 * i1 + 2 + i * 64] << 16) |
+					(paddedMessage[j][4 * i1 + 3 + i * 64] << 24);
+            }
+            x[i1] = vld1q_u32(&y[0]);
+        }
+        uint32x4_t a,b,c,d;
+        a = state[0];
+        b = state[1];
+        c = state[2];
+        d = state[3];
+        //auto start = system_clock::now();
+        FF_simd(&a, b, c, d, x[0], s11, 0xd76aa478);
+		FF_simd(&d, a, b, c, x[1], s12, 0xe8c7b756);
+		FF_simd(&c, d, a, b, x[2], s13, 0x242070db);
+		FF_simd(&b, c, d, a, x[3], s14, 0xc1bdceee);
+		FF_simd(&a, b, c, d, x[4], s11, 0xf57c0faf);
+		FF_simd(&d, a, b, c, x[5], s12, 0x4787c62a);
+		FF_simd(&c, d, a, b, x[6], s13, 0xa8304613);
+		FF_simd(&b, c, d, a, x[7], s14, 0xfd469501);
+		FF_simd(&a, b, c, d, x[8], s11, 0x698098d8);
+		FF_simd(&d, a, b, c, x[9], s12, 0x8b44f7af);
+		FF_simd(&c, d, a, b, x[10], s13, 0xffff5bb1);
+		FF_simd(&b, c, d, a, x[11], s14, 0x895cd7be);
+		FF_simd(&a, b, c, d, x[12], s11, 0x6b901122);
+		FF_simd(&d, a, b, c, x[13], s12, 0xfd987193);
+		FF_simd(&c, d, a, b, x[14], s13, 0xa679438e);
+		FF_simd(&b, c, d, a, x[15], s14, 0x49b40821);
+
+		/* Round 2 */
+		GG_simd(&a, b, c, d, x[1], s21, 0xf61e2562);
+		GG_simd(&d, a, b, c, x[6], s22, 0xc040b340);
+		GG_simd(&c, d, a, b, x[11], s23, 0x265e5a51);
+		GG_simd(&b, c, d, a, x[0], s24, 0xe9b6c7aa);
+		GG_simd(&a, b, c, d, x[5], s21, 0xd62f105d);
+		GG_simd(&d, a, b, c, x[10], s22, 0x2441453);
+		GG_simd(&c, d, a, b, x[15], s23, 0xd8a1e681);
+		GG_simd(&b, c, d, a, x[4], s24, 0xe7d3fbc8);
+		GG_simd(&a, b, c, d, x[9], s21, 0x21e1cde6);
+		GG_simd(&d, a, b, c, x[14], s22, 0xc33707d6);
+		GG_simd(&c, d, a, b, x[3], s23, 0xf4d50d87);
+		GG_simd(&b, c, d, a, x[8], s24, 0x455a14ed);
+		GG_simd(&a, b, c, d, x[13], s21, 0xa9e3e905);
+		GG_simd(&d, a, b, c, x[2], s22, 0xfcefa3f8);
+		GG_simd(&c, d, a, b, x[7], s23, 0x676f02d9);
+		GG_simd(&b, c, d, a, x[12], s24, 0x8d2a4c8a);
+
+		/* Round 3 */
+		HH_simd(&a, b, c, d, x[5], s31, 0xfffa3942);
+		HH_simd(&d, a, b, c, x[8], s32, 0x8771f681);
+		HH_simd(&c, d, a, b, x[11], s33, 0x6d9d6122);
+		HH_simd(&b, c, d, a, x[14], s34, 0xfde5380c);
+		HH_simd(&a, b, c, d, x[1], s31, 0xa4beea44);
+		HH_simd(&d, a, b, c, x[4], s32, 0x4bdecfa9);
+		HH_simd(&c, d, a, b, x[7], s33, 0xf6bb4b60);
+		HH_simd(&b, c, d, a, x[10], s34, 0xbebfbc70);
+		HH_simd(&a, b, c, d, x[13], s31, 0x289b7ec6);
+		HH_simd(&d, a, b, c, x[0], s32, 0xeaa127fa);
+		HH_simd(&c, d, a, b, x[3], s33, 0xd4ef3085);
+		HH_simd(&b, c, d, a, x[6], s34, 0x4881d05);
+		HH_simd(&a, b, c, d, x[9], s31, 0xd9d4d039);
+		HH_simd(&d, a, b, c, x[12], s32, 0xe6db99e5);
+		HH_simd(&c, d, a, b, x[15], s33, 0x1fa27cf8);
+		HH_simd(&b, c, d, a, x[2], s34, 0xc4ac5665);
+
+		/* Round 4 */
+		II_simd(&a, b, c, d, x[0], s41, 0xf4292244);
+		II_simd(&d, a, b, c, x[7], s42, 0x432aff97);
+		II_simd(&c, d, a, b, x[14], s43, 0xab9423a7);
+		II_simd(&b, c, d, a, x[5], s44, 0xfc93a039);
+		II_simd(&a, b, c, d, x[12], s41, 0x655b59c3);
+		II_simd(&d, a, b, c, x[3], s42, 0x8f0ccc92);
+		II_simd(&c, d, a, b, x[10], s43, 0xffeff47d);
+		II_simd(&b, c, d, a, x[1], s44, 0x85845dd1);
+		II_simd(&a, b, c, d, x[8], s41, 0x6fa87e4f);
+		II_simd(&d, a, b, c, x[15], s42, 0xfe2ce6e0);
+		II_simd(&c, d, a, b, x[6], s43, 0xa3014314);
+		II_simd(&b, c, d, a, x[13], s44, 0x4e0811a1);
+		II_simd(&a, b, c, d, x[4], s41, 0xf7537e82);
+		II_simd(&d, a, b, c, x[11], s42, 0xbd3af235);
+		II_simd(&c, d, a, b, x[2], s43, 0x2ad7d2bb);
+		II_simd(&b, c, d, a, x[9], s44, 0xeb86d391);
+
+        state[0] = vaddq_u32(state[0],a);
+        state[1] = vaddq_u32(state[1],b);
+        state[2] = vaddq_u32(state[2],c);
+        state[3] = vaddq_u32(state[3],d);
+    }
+    for(int i = 0;i < 4;i++)
+    {
+        uint32x4_t value = state[i];
+        uint32x4_t tmp1 = vdupq_n_u32(0xff);
+        uint32x4_t tmp2 = vdupq_n_u32(0xff00);
+        uint32x4_t tmp3 = vdupq_n_u32(0xff0000);
+        uint32x4_t tmp4 = vdupq_n_u32(0xff000000);
+        state[i] = vorrq_u32(vorrq_u32(vshlq_n_u32(vandq_u32(value,tmp1),24),
+        vshlq_n_u32(vandq_u32(value,tmp2),8)),
+        vorrq_u32(vshrq_n_u32(vandq_u32(value,tmp3),8),vshrq_n_u32(vandq_u32(value,tmp4),24)));
+    }
+    for(int i = 0; i < 4; i++) 
+    {
+        delete[] paddedMessage[i];
+    }
+    //delete[] paddedMessage;
+    //delete[] messageLength;
+}
