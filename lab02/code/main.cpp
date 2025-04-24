@@ -14,6 +14,7 @@ using namespace chrono;
 
 int main()
 {
+    ofstream logFile("time_log.txt");
     double time_hash = 0;  // 用于MD5哈希的时间
     double time_guess = 0; // 哈希和猜测的总时长
     double time_train = 0; // 模型训练的总时长
@@ -43,13 +44,13 @@ int main()
 
             // 在此处更改实验生成的猜测上限
             int generate_n=10000000;
-            if (history + q.total_guesses > 10000000)
+            if (history + q.total_guesses > generate_n)
             {
                 auto end = system_clock::now();
                 auto duration = duration_cast<microseconds>(end - start);
                 time_guess = double(duration.count()) * microseconds::period::num / microseconds::period::den;
                 cout << "Guess time:" << time_guess - time_hash << "seconds"<< endl;
-                cout << "Hash time:" << time_hash << "seconds"<<endl;
+                logFile << "Hash time:" << time_hash << "seconds"<<endl;
                 cout << "Train time:" << time_train <<"seconds"<<endl;
                 break;
             }
@@ -60,7 +61,12 @@ int main()
         {
             uint32x4_t state[4];
             int num = q.guesses.size();
+            //bit32 state[4];
             auto start_hash = system_clock::now();
+            /*for(int i = 0;i < q.guesses.size();i++)
+            {
+                MD5Hash(q.guesses[i],state);
+            }*/
             for (int i = 0;i < num;i += 4)
             {
                 string pw1 = q.guesses[i];
@@ -69,7 +75,7 @@ int main()
                 string pw4 = i+3 >= num ? "" : q.guesses[i + 3];
                 string pw_batch[4] = {pw1,pw2,pw3,pw4};
                 // TODO：对于SIMD实验，将这里替换成你的SIMD MD5函数
-                //MD5Hash(pw, state);
+                //MD5Hash(pw1, state);
                 MD5Hash_SIMD(pw_batch,state);
                 //Hash time:14.1481seconds
                 // 以下注释部分用于输出猜测和哈希，但是由于自动测试系统不太能写文件，所以这里你可以改成cout
