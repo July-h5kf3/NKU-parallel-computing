@@ -58,28 +58,41 @@ int main()
         // 然后，q.guesses将会被清空。为了有效记录已经生成的口令总数，维护一个history变量来进行记录
         if (curr_num > 1000000)
         {
-            __m128i state[4];
+            __m512i state[4];
             int num = q.guesses.size();
             auto start_hash = system_clock::now();
-            for (int i = 0;i < num;i += 4)
+            for (int i = 0; i < num; i += 16)
             {
-                string pw1 = q.guesses[i];
+                string pw1 = i >= num ? "" : q.guesses[i];
                 string pw2 = i+1 >= num ? "" : q.guesses[i + 1];
                 string pw3 = i+2 >= num ? "" : q.guesses[i + 2];
                 string pw4 = i+3 >= num ? "" : q.guesses[i + 3];
-                string pw_batch[4] = {pw1,pw2,pw3,pw4};
-                // TODO：对于SIMD实验，将这里替换成你的SIMD MD5函数
-                //MD5Hash(pw, state);
-                MD5Hash_SIMD(pw_batch,state);
-                //Hash time:14.1481seconds
-                // 以下注释部分用于输出猜测和哈希，但是由于自动测试系统不太能写文件，所以这里你可以改成cout
-                // a<<pw<<"\t";
-                // for (int i1 = 0; i1 < 4; i1 += 1)
-                // {
-                //     a << std::setw(8) << std::setfill('0') << hex << state[i1];
+                string pw5 = i+4 >= num ? "" : q.guesses[i + 4];
+                string pw6 = i+5 >= num ? "" : q.guesses[i + 5];
+                string pw7 = i+6 >= num ? "" : q.guesses[i + 6];
+                string pw8 = i+7 >= num ? "" : q.guesses[i + 7];
+                string pw9 = i+8 >= num ? "" : q.guesses[i + 8];
+                string pw10 = i+9 >= num ? "" : q.guesses[i + 9];
+                string pw11 = i+10 >= num ? "" : q.guesses[i + 10];
+                string pw12 = i+11 >= num ? "" : q.guesses[i + 11];
+                string pw13 = i+12 >= num ? "" : q.guesses[i + 12];
+                string pw14 = i+13 >= num ? "" : q.guesses[i + 13];
+                string pw15 = i+14 >= num ? "" : q.guesses[i + 14];
+                string pw16 = i+15 >= num ? "" : q.guesses[i + 15];
+            
+                // 将这些密码组成一个16元素的批次
+                string pw_batch[16] = {pw1, pw2, pw3, pw4, pw5, pw6, pw7, pw8, pw9, pw10, pw11, pw12, pw13, pw14, pw15, pw16};
+            
+                // 使用SIMD MD5函数处理这个批次
+                MD5Hash_SIMD(pw_batch, state);
+                // Hash time: 14.1481 seconds
+                // 以下代码用于输出猜测和哈希（可选）
+                // a << pw1 << "\t"; // 输出第一个密码
+                // for (int i1 = 0; i1 < 4; i1++) {
+                //     a << std::setw(8) << std::setfill('0') << std::hex << state[i1];
                 // }
-                // a << endl;
-            }
+                // a << std::endl;
+            }            
 
             // 在这里对哈希所需的总时长进行计算
             auto end_hash = system_clock::now();

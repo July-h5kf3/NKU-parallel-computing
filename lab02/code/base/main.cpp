@@ -3,7 +3,7 @@
 #include <fstream>
 #include "md5.h"
 #include <iomanip>
-#include <arm_neon.h>
+//#include <arm_neon.h>
 using namespace std;
 using namespace chrono;
 
@@ -20,7 +20,7 @@ int main()
     double time_train = 0; // 模型训练的总时长
     PriorityQueue q;
     auto start_train = system_clock::now();
-    q.m.train("/home/s2312810/PCFG_framework/input/Rockyou-singleLined-full.txt");
+    q.m.train("/home/lorn/NKU-parallel-computing/data/Rockyou-singleLined-full.txt");
     q.m.order();
     auto end_train = system_clock::now();
     auto duration_train = duration_cast<microseconds>(end_train - start_train);
@@ -59,14 +59,15 @@ int main()
         // 然后，q.guesses将会被清空。为了有效记录已经生成的口令总数，维护一个history变量来进行记录
         if (curr_num > 1000000)
         {
-            uint32x4_t state[4];
-            int num = q.guesses.size();
-            //bit32 state[4];
+            //uint32x4_t state[4];
+            //int num = q.guesses.size();
+            bit32 state[4];
             auto start_hash = system_clock::now();
-            /*for(int i = 0;i < q.guesses.size();i++)
+            for(int i = 0;i < q.guesses.size();i++)
             {
                 MD5Hash(q.guesses[i],state);
-            }*/
+            }
+            /*
             for (int i = 0;i < num;i += 4)
             {
                 string pw1 = q.guesses[i];
@@ -85,7 +86,7 @@ int main()
                 //     a << std::setw(8) << std::setfill('0') << hex << state[i1];
                 // }
                 // a << endl;
-            }
+            }*/
 
             // 在这里对哈希所需的总时长进行计算
             auto end_hash = system_clock::now();

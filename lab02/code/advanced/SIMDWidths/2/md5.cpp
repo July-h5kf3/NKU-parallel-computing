@@ -2,7 +2,7 @@
 #include <iomanip>
 #include <assert.h>
 #include <chrono>
-//#include<arm_neon.h>
+#include <immintrin.h>
 
 using namespace std;
 using namespace chrono;
@@ -218,62 +218,68 @@ void MD5Hash(string input, bit32 *state)
 	delete[] paddedMessage;
 	delete[] messageLength;
 }
-/*
-inline uint32x4_t ROTATELEFT_simd(uint32x4_t num,int n)
+
+inline __m128i bit_not_simd(__m128i x)
 {
-    return vorrq_u32(vshlq_n_u32(num,n),vshrq_n_u32(num,32-n));
+	return _mm_xor_si128(x,_mm_set1_epi32(0xFFFFFFFF));
 }
 
-inline uint32x4_t F_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
+inline __m128i ROTATELEFT_simd(__m128i num,int n)
 {
-    return vorrq_u32(vandq_u32(x,y),vandq_u32(vmvnq_u32(x),z));
-}
-inline uint32x4_t G_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
-{
-    return vorrq_u32(vandq_u32(x,z),vandq_u32(y,vmvnq_u32(z)));
-}
-inline uint32x4_t H_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
-{
-    return veorq_u32(veorq_u32(x,y),z);
-}
-inline uint32x4_t I_simd(uint32x4_t x,uint32x4_t y,uint32x4_t z)
-{
-    return veorq_u32(y,vorrq_u32(x,vmvnq_u32(z)));
+    return _mm_or_si128(_mm_slli_epi32(num,n),_mm_srli_epi32(num,32-n));
 }
 
-inline void FF_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+inline __m128i F_simd(__m128i x,__m128i y,__m128i z)
 {
-    uint32x4_t ac_vec = vdupq_n_u32(ac);
-    *a = vaddq_u32(*a,vaddq_u32(F_simd(b,c,d),vaddq_u32(x,ac_vec)));
-    *a = ROTATELEFT_simd(*a,s);
-    *a = vaddq_u32(*a,b);
+    return _mm_or_si128(_mm_and_si128(x,y),_mm_and_si128(bit_not_simd(x),z));
 }
-inline void GG_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+inline __m128i G_simd(__m128i x,__m128i y,__m128i z)
 {
-    uint32x4_t ac_vec = vdupq_n_u32(ac);
-    *a = vaddq_u32(*a,vaddq_u32(G_simd(b,c,d),vaddq_u32(x,ac_vec)));
-    *a = ROTATELEFT_simd(*a,s);
-    *a = vaddq_u32(*a,b);
+    return _mm_or_si128(_mm_and_si128(x,z),_mm_and_si128(y,bit_not_simd(z)));
 }
-inline void HH_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+inline __m128i H_simd(__m128i x,__m128i y,__m128i z)
 {
-    uint32x4_t ac_vec = vdupq_n_u32(ac);
-    *a = vaddq_u32(*a,vaddq_u32(H_simd(b,c,d),vaddq_u32(x,ac_vec)));
-    *a = ROTATELEFT_simd(*a,s);
-    *a = vaddq_u32(*a,b);    
+    return _mm_xor_si128(_mm_xor_si128(x,y),z);
 }
-inline void II_simd(uint32x4_t *a,uint32x4_t b,uint32x4_t c,uint32x4_t d,uint32x4_t x,int s,uint32_t ac)
+inline __m128i I_simd(__m128i x,__m128i y,__m128i z)
 {
-    uint32x4_t ac_vec = vdupq_n_u32(ac);
-    *a = vaddq_u32(*a,vaddq_u32(I_simd(b,c,d),vaddq_u32(x,ac_vec)));
-    *a = ROTATELEFT_simd(*a,s);
-    *a = vaddq_u32(*a,b);
+    return _mm_xor_si128(y,_mm_or_si128(x,bit_not_simd(z)));
 }
-void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
+
+inline void FF_simd(__m128i *a,__m128i b,__m128i c,__m128i d,__m128i x,int s,uint32_t ac)
 {
-    Byte *paddedMessage[4];
-    int messageLength[4];
-    for(int i = 0;i < 4;i++)
+    __m128i ac_vec = _mm_set1_epi32(ac);
+    *a = _mm_add_epi32(*a,_mm_add_epi32(F_simd(b,c,d),_mm_add_epi32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = _mm_add_epi32(*a,b);
+}
+inline void GG_simd(__m128i *a,__m128i b,__m128i c,__m128i d,__m128i x,int s,uint32_t ac)
+{
+    __m128i ac_vec = _mm_set1_epi32(ac);
+    *a = _mm_add_epi32(*a,_mm_add_epi32(G_simd(b,c,d),_mm_add_epi32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = _mm_add_epi32(*a,b);
+}
+inline void HH_simd(__m128i *a,__m128i b,__m128i c,__m128i d,__m128i x,int s,uint32_t ac)
+{
+    __m128i ac_vec = _mm_set1_epi32(ac);
+    *a = _mm_add_epi32(*a,_mm_add_epi32(H_simd(b,c,d),_mm_add_epi32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = _mm_add_epi32(*a,b);
+}
+inline void II_simd(__m128i *a,__m128i b,__m128i c,__m128i d,__m128i x,int s,uint32_t ac)
+{
+    __m128i ac_vec = _mm_set1_epi32(ac);
+    *a = _mm_add_epi32(*a,_mm_add_epi32(I_simd(b,c,d),_mm_add_epi32(x,ac_vec)));
+    *a = ROTATELEFT_simd(*a,s);
+    *a = _mm_add_epi32(*a,b);
+}
+
+void MD5Hash_SIMD(string input[2],__m128i state[4])
+{
+    Byte *paddedMessage[2];
+    int messageLength[2];
+    for(int i = 0;i < 2;i++)
     {
         paddedMessage[i] = StringProcess(input[i],&messageLength[i]);
         assert(messageLength[i] == messageLength[0]);
@@ -282,26 +288,26 @@ void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
     //bit32 state_begin[4] = {0x67452301,0xefcdab89,0x98badcfe,0x10325476};
     //for(int i = 0;i < 4;i++)
     //state[i] = {0x67452301,0xefcdab89,0x98badcfe,0x10325476};
-    state[0] = vdupq_n_u32(0x67452301);
-    state[1] = vdupq_n_u32(0xefcdab89);
-    state[2] = vdupq_n_u32(0x98badcfe);
-    state[3] = vdupq_n_u32(0x10325476);
+    state[0] = _mm_setr_epi32(0x67452301, 0x67452301,0,0);
+	state[1] = _mm_setr_epi32(0xefcdab89, 0xefcdab89,0,0);
+	state[2] = _mm_setr_epi32(0x98badcfe, 0x98badcfe,0,0);
+	state[3] = _mm_setr_epi32(0x10325476, 0x10325476,0,0);
     for(int i = 0;i < n_block;i++)
     {
-        uint32x4_t x[16];
+        __m128i x[16];
         bit32 y[4];
-        for(int i1 = 0;i1 < 16;i1++)
-        {
-            for(int j = 0;j < 4;j++)
-            {
-                y[j] =  (paddedMessage[j][4 * i1 + i * 64]) |
-					(paddedMessage[j][4 * i1 + 1 + i * 64] << 8) |
-					(paddedMessage[j][4 * i1 + 2 + i * 64] << 16) |
-					(paddedMessage[j][4 * i1 + 3 + i * 64] << 24);
-            }
-            x[i1] = vld1q_u32(&y[0]);
-        }
-        uint32x4_t a,b,c,d;
+        for (int i1 = 0; i1 < 16; i1++) 
+		{
+			for (int j = 0; j < 2; j++) 
+			{
+				y[j] = (paddedMessage[j][4 * i1 + i * 64]) |
+					   (paddedMessage[j][4 * i1 + 1 + i * 64] << 8) |
+					   (paddedMessage[j][4 * i1 + 2 + i * 64] << 16) |
+					   (paddedMessage[j][4 * i1 + 3 + i * 64] << 24);
+			}
+			x[i1] = _mm_setr_epi32(y[0], y[1],0,0);
+		}
+       	__m128i a,b,c,d;
         a = state[0];
         b = state[1];
         c = state[2];
@@ -324,6 +330,7 @@ void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
 		FF_simd(&c, d, a, b, x[14], s13, 0xa679438e);
 		FF_simd(&b, c, d, a, x[15], s14, 0x49b40821);
 
+		/* Round 2 */
 		GG_simd(&a, b, c, d, x[1], s21, 0xf61e2562);
 		GG_simd(&d, a, b, c, x[6], s22, 0xc040b340);
 		GG_simd(&c, d, a, b, x[11], s23, 0x265e5a51);
@@ -341,6 +348,7 @@ void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
 		GG_simd(&c, d, a, b, x[7], s23, 0x676f02d9);
 		GG_simd(&b, c, d, a, x[12], s24, 0x8d2a4c8a);
 
+		/* Round 3 */
 		HH_simd(&a, b, c, d, x[5], s31, 0xfffa3942);
 		HH_simd(&d, a, b, c, x[8], s32, 0x8771f681);
 		HH_simd(&c, d, a, b, x[11], s33, 0x6d9d6122);
@@ -358,6 +366,7 @@ void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
 		HH_simd(&c, d, a, b, x[15], s33, 0x1fa27cf8);
 		HH_simd(&b, c, d, a, x[2], s34, 0xc4ac5665);
 
+		/* Round 4 */
 		II_simd(&a, b, c, d, x[0], s41, 0xf4292244);
 		II_simd(&d, a, b, c, x[7], s42, 0x432aff97);
 		II_simd(&c, d, a, b, x[14], s43, 0xab9423a7);
@@ -375,27 +384,26 @@ void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
 		II_simd(&c, d, a, b, x[2], s43, 0x2ad7d2bb);
 		II_simd(&b, c, d, a, x[9], s44, 0xeb86d391);
 
-        state[0] = vaddq_u32(state[0],a);
-        state[1] = vaddq_u32(state[1],b);
-        state[2] = vaddq_u32(state[2],c);
-        state[3] = vaddq_u32(state[3],d);
+        state[0] = _mm_add_epi32(state[0],a);
+        state[1] = _mm_add_epi32(state[1],b);
+        state[2] = _mm_add_epi32(state[2],c);
+        state[3] = _mm_add_epi32(state[3],d);
     }
     for(int i = 0;i < 4;i++)
     {
-        uint32x4_t value = state[i];
-        uint32x4_t tmp1 = vdupq_n_u32(0xff);
-        uint32x4_t tmp2 = vdupq_n_u32(0xff00);
-        uint32x4_t tmp3 = vdupq_n_u32(0xff0000);
-        uint32x4_t tmp4 = vdupq_n_u32(0xff000000);
-        state[i] = vorrq_u32(vorrq_u32(vshlq_n_u32(vandq_u32(value,tmp1),24),
-        vshlq_n_u32(vandq_u32(value,tmp2),8)),
-        vorrq_u32(vshrq_n_u32(vandq_u32(value,tmp3),8),vshrq_n_u32(vandq_u32(value,tmp4),24)));
+        __m128i value = state[i];
+        __m128i tmp1 = _mm_setr_epi32(0xff,0xff,0,0);
+        __m128i tmp2 = _mm_setr_epi32(0xff00,0xff00,0,0);
+        __m128i tmp3 = _mm_setr_epi32(0xff0000,0xff0000,0,0);
+        __m128i tmp4 = _mm_setr_epi32(0xff000000,0xff000000,0,0);
+        state[i] = _mm_or_si128(_mm_or_si128(_mm_slli_epi32(_mm_and_si128(value,tmp1),24),
+    	_mm_slli_epi32(_mm_and_si128(value,tmp2),8)),
+        _mm_or_si128(_mm_srli_epi32(_mm_and_si128(value,tmp3),8),_mm_srli_epi32(_mm_and_si128(value,tmp4),24)));
     }
-    for(int i = 0; i < 4; i++) 
+    for(int i = 0; i < 2; i++) 
     {
         delete[] paddedMessage[i];
     }
     //delete[] paddedMessage;
     //delete[] messageLength;
 }
-*/

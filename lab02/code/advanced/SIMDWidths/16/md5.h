@@ -1,7 +1,8 @@
 #include <iostream>
 #include <string>
 #include <cstring>
-//#include<arm_neon.h>
+#include <immintrin.h>
+
 
 using namespace std;
 
@@ -80,4 +81,4 @@ typedef unsigned int bit32;
 }
 
 void MD5Hash(string input, bit32 *state);
-//void MD5Hash_SIMD(string input[4],uint32x4_t state[4]);
+void MD5Hash_SIMD(string input[16],__m512i state[4]);

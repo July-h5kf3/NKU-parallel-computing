@@ -58,16 +58,20 @@ int main()
         // 然后，q.guesses将会被清空。为了有效记录已经生成的口令总数，维护一个history变量来进行记录
         if (curr_num > 1000000)
         {
-            __m128i state[4];
+            __m256i state[4];
             int num = q.guesses.size();
             auto start_hash = system_clock::now();
-            for (int i = 0;i < num;i += 4)
+            for (int i = 0;i < num;i += 8)
             {
                 string pw1 = q.guesses[i];
                 string pw2 = i+1 >= num ? "" : q.guesses[i + 1];
                 string pw3 = i+2 >= num ? "" : q.guesses[i + 2];
                 string pw4 = i+3 >= num ? "" : q.guesses[i + 3];
-                string pw_batch[4] = {pw1,pw2,pw3,pw4};
+                string pw5 = i+4 >= num ? "" : q.guesses[i + 4];
+                string pw6 = i+5 >= num ? "" : q.guesses[i + 5];
+                string pw7 = i+6 >= num ? "" : q.guesses[i + 6];
+                string pw8 = i+7 >= num ? "" : q.guesses[i + 7];
+                string pw_batch[8] = {pw1,pw2,pw3,pw4,pw5,pw6,pw7};
                 // TODO：对于SIMD实验，将这里替换成你的SIMD MD5函数
                 //MD5Hash(pw, state);
                 MD5Hash_SIMD(pw_batch,state);

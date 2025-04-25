@@ -61,13 +61,13 @@ int main()
             __m128i state[4];
             int num = q.guesses.size();
             auto start_hash = system_clock::now();
-            for (int i = 0;i < num;i += 4)
+            for (int i = 0;i < num;i += 2)
             {
                 string pw1 = q.guesses[i];
                 string pw2 = i+1 >= num ? "" : q.guesses[i + 1];
-                string pw3 = i+2 >= num ? "" : q.guesses[i + 2];
-                string pw4 = i+3 >= num ? "" : q.guesses[i + 3];
-                string pw_batch[4] = {pw1,pw2,pw3,pw4};
+                //string pw3 = i+2 >= num ? "" : q.guesses[i + 2];
+                //string pw4 = i+3 >= num ? "" : q.guesses[i + 3];
+                string pw_batch[2] = {pw1,pw2};
                 // TODO：对于SIMD实验，将这里替换成你的SIMD MD5函数
                 //MD5Hash(pw, state);
                 MD5Hash_SIMD(pw_batch,state);
