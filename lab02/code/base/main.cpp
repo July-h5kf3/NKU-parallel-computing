@@ -61,10 +61,12 @@ int main()
         {
             //uint32x4_t state[4];
             //int num = q.guesses.size();
-            bit32 state[4];
             auto start_hash = system_clock::now();
+            bit32 state[4];
+            
             for(int i = 0;i < q.guesses.size();i++)
             {
+                
                 MD5Hash(q.guesses[i],state);
             }
             /*
@@ -91,7 +93,7 @@ int main()
             // 在这里对哈希所需的总时长进行计算
             auto end_hash = system_clock::now();
             auto duration = duration_cast<microseconds>(end_hash - start_hash);
-            time_hash += double(duration.count()) * microseconds::period::num / microseconds::period::den;
+            time_hash += double(duration.count()) * microseconds::period::num / microseconds::period::den;            
 
             // 记录已经生成的口令总数
             history += curr_num;

@@ -60,9 +60,10 @@ int main()
         {
             __m128i state[4];
             int num = q.guesses.size();
-            auto start_hash = system_clock::now();
+            
             for (int i = 0;i < num;i += 4)
             {
+                auto start_hash = system_clock::now();
                 string pw1 = q.guesses[i];
                 string pw2 = i+1 >= num ? "" : q.guesses[i + 1];
                 string pw3 = i+2 >= num ? "" : q.guesses[i + 2];
@@ -79,12 +80,14 @@ int main()
                 //     a << std::setw(8) << std::setfill('0') << hex << state[i1];
                 // }
                 // a << endl;
+                auto end_hash = system_clock::now();
+                auto duration = duration_cast<microseconds>(end_hash - start_hash);
+                time_hash += double(duration.count()) * microseconds::period::num / microseconds::period::den;  
             }
 
-            // 在这里对哈希所需的总时长进行计算
-            auto end_hash = system_clock::now();
-            auto duration = duration_cast<microseconds>(end_hash - start_hash);
-            time_hash += double(duration.count()) * microseconds::period::num / microseconds::period::den;
+            // 在这里对哈希所需的总时长进g行计算
+            
+            
 
             // 记录已经生成的口令总数
             history += curr_num;
