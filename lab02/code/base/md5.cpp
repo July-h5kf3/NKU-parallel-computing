@@ -218,7 +218,7 @@ void MD5Hash(string input, bit32 *state)
 	delete[] paddedMessage;
 	delete[] messageLength;
 }
-/*
+
 inline uint32x4_t ROTATELEFT_simd(uint32x4_t num,int n)
 {
     return vorrq_u32(vshlq_n_u32(num,n),vshrq_n_u32(num,32-n));
@@ -398,4 +398,3 @@ void MD5Hash_SIMD(string input[4],uint32x4_t state[4])
     //delete[] paddedMessage;
     //delete[] messageLength;
 }
-*/
