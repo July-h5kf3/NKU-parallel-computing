@@ -61,9 +61,14 @@ int main()
         {
             //uint32x4_t state[4];
             //int num = q.guesses.size();
+<<<<<<< Updated upstream
             auto start_hash = system_clock::now();
             bit32 state[4];
             
+=======
+            bit32 state[4];
+            auto start_hash = system_clock::now();
+>>>>>>> Stashed changes
             for(int i = 0;i < q.guesses.size();i++)
             {
                 

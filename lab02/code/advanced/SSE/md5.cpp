@@ -288,7 +288,7 @@ void MD5Hash_SIMD(string input[4],__m128i state[4])
     //bit32 state_begin[4] = {0x67452301,0xefcdab89,0x98badcfe,0x10325476};
     //for(int i = 0;i < 4;i++)
     //state[i] = {0x67452301,0xefcdab89,0x98badcfe,0x10325476};
-    state[0] = _mm_set1_epi32(0x67452301);
+    	
     state[1] = _mm_set1_epi32(0xefcdab89);
     state[2] = _mm_set1_epi32(0x98badcfe);
     state[3] = _mm_set1_epi32(0x10325476);
