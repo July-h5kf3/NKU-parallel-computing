@@ -3,6 +3,7 @@
 #include <fstream>
 #include "md5.h"
 #include <iomanip>
+#include <arm_neon.h>
 using namespace std;
 using namespace chrono;
 
@@ -11,14 +12,20 @@ using namespace chrono;
 // g++ main.cpp train.cpp guessing.cpp md5.cpp -o test.exe -O1
 // g++ main.cpp train.cpp guessing.cpp md5.cpp -o test.exe -O2
 
-int main()
+int main(int argc,char* argv[])
 {
+     if (argc < 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " <thread_num>" << std::endl;
+        return 1;
+    }
     double time_hash = 0;  // 用于MD5哈希的时间
     double time_guess = 0; // 哈希和猜测的总时长
     double time_train = 0; // 模型训练的总时长
     PriorityQueue q;
+    q.THREAD_NUM = std::stoi(argv[1]);
     auto start_train = system_clock::now();
-    q.m.train("/home/s2312810/PCFG_framework/input/Rockyou-singleLined-full.txt");
+    q.m.train("/guessdata/Rockyou-singleLined-full.txt");
     q.m.order();
     auto end_train = system_clock::now();
     auto duration_train = duration_cast<microseconds>(end_train - start_train);
@@ -57,13 +64,25 @@ int main()
         // 然后，q.guesses将会被清空。为了有效记录已经生成的口令总数，维护一个history变量来进行记录
         if (curr_num > 1000000)
         {
+            uint32x4_t state[4];
+            // bit32 state[4];
+            int num = q.guesses.size();
             auto start_hash = system_clock::now();
-            bit32 state[4];
-            for (string pw : q.guesses)
+            // for(int i = 0;i < num;i++)
+            // {
+            //     MD5Hash(q.guesses[i],state);
+            // }
+            for (int i = 0;i < num;i += 4)
             {
+                string pw1 = q.guesses[i];
+                string pw2 = i+1 >= num ? "" : q.guesses[i + 1];
+                string pw3 = i+2 >= num ? "" : q.guesses[i + 2];
+                string pw4 = i+3 >= num ? "" : q.guesses[i + 3];
+                string pw_batch[4] = {pw1,pw2,pw3,pw4};
                 // TODO：对于SIMD实验，将这里替换成你的SIMD MD5函数
-                MD5Hash(pw, state);
-
+                //MD5Hash(pw, state);
+                MD5Hash_SIMD(pw_batch,state);
+                //Hash time:14.1481seconds
                 // 以下注释部分用于输出猜测和哈希，但是由于自动测试系统不太能写文件，所以这里你可以改成cout
                 // a<<pw<<"\t";
                 // for (int i1 = 0; i1 < 4; i1 += 1)

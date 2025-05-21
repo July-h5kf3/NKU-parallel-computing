@@ -1,14 +1,11 @@
 #include "PCFG.h"
 #include<pthread.h>
 using namespace std;
-#define THREAD_NUM 8
-
 typedef struct
 {
     string pre_terminal;
     segment* a;
     PriorityQueue* self;
-    bool flag;
     int start_index;
     int end_index;
 }ThreadTask;
@@ -23,17 +20,17 @@ void* PriorityQueue::fill_range(void* arg)
     PriorityQueue* self = task->self;
 
     vector<string> local_guesses;
+    local_guesses.reserve(task->end_index - task->start_index);
     int local_count = 0;
     // std::cout << "Thread running: start=" << task->start_index
     //           << ", end=" << task->end_index
     //           << ", total=" << task->a->ordered_values.size() << std::endl;
     for(int i = task->start_index;i < task->end_index;i++)
     {
+        string& suffix = a->ordered_values[i];
         string guess;
-        if(task->flag == 1)
-        guess = task->pre_terminal + a->ordered_values[i];
-        else 
-        guess = a->ordered_values[i];
+        guess.reserve(task->pre_terminal.size() + suffix.size());
+        guess += task->pre_terminal + suffix;
         local_guesses.emplace_back(guess);
         local_count++;
     }
@@ -251,15 +248,16 @@ void PriorityQueue::Generate(PT pt)
         // 这个for循环就是你需要进行并行化的主要部分了，特别是在多线程&GPU编程任务中
         // 可以看到，这个循环本质上就是把模型中一个segment的所有value，赋值到PT中，形成一系列新的猜测
         // 这个过程是可以高度并行化的
-        /*for (int i = 0; i < pt.max_indices[0]; i += 1)
-        {
-            string guess = a->ordered_values[i];
-            // cout << guess << endl;
-            guesses.emplace_back(guess);
-            total_guesses += 1;
-        }*/
+        // for (int i = 0; i < pt.max_indices[0]; i += 1)
+        // {
+        //     string guess = a->ordered_values[i];
+        //     // cout << guess << endl;
+        //     guesses.emplace_back(guess);
+        //     total_guesses += 1;
+        // }
         pthread_t threads[THREAD_NUM];
-        int chunk = pt.max_indices[0] / THREAD_NUM;
+        int all = pt.max_indices[0];
+        int chunk = all / THREAD_NUM;
         //cout<<"chunk = "<<chunk<<endl;
         for(int i = 0;i < THREAD_NUM;i++)
         {
@@ -268,9 +266,8 @@ void PriorityQueue::Generate(PT pt)
             //cout<<"xxx"<<endl;
             task->a = a;
             task->self = this;
-            task->flag = 0;  
             task->start_index = i * chunk;
-            task->end_index = (i == THREAD_NUM - 1) ? pt.max_indices[0] : (i + 1) * chunk;
+            task->end_index = (i == THREAD_NUM - 1) ? all : (i + 1) * chunk;
             pthread_create(&threads[i], NULL, PriorityQueue::fill_range, task);
             // if (ret != 0) 
             // {
@@ -329,25 +326,25 @@ void PriorityQueue::Generate(PT pt)
         // 这个for循环就是你需要进行并行化的主要部分了，特别是在多线程&GPU编程任务中
         // 可以看到，这个循环本质上就是把模型中一个segment的所有value，赋值到PT中，形成一系列新的猜测
         // 这个过程是可以高度并行化的
-       /*for (int i = 0; i < pt.max_indices[pt.content.size() - 1]; i += 1)
-        {
-            string temp = guess + a->ordered_values[i];
-            // cout << temp << endl;
-            guesses.emplace_back(temp);
-            total_guesses += 1;
-        }*/
+    //    for (int i = 0; i < pt.max_indices[pt.content.size() - 1]; i += 1)
+    //     {
+    //         string temp = guess + a->ordered_values[i];
+    //         // cout << temp << endl;
+    //         guesses.emplace_back(temp);
+    //         total_guesses += 1;
+    //     }
         pthread_t threads[THREAD_NUM];
-        int chunk = pt.max_indices[pt.content.size() - 1] / THREAD_NUM;
+        int all = pt.max_indices[pt.content.size() - 1];
+        int chunk = all / THREAD_NUM;
         for(int i = 0;i < THREAD_NUM;i++)
         {
             ThreadTask* task = new ThreadTask();
             // cout<<"guess = "<<guess<<endl;
             task->pre_terminal = guess;
             task->a = a;
-            task->flag = 1;
             task->self = this;
             task->start_index = i * chunk;
-            task->end_index = (i == THREAD_NUM - 1) ? pt.max_indices[pt.content.size() - 1] : (i + 1) * chunk;
+            task->end_index = (i == THREAD_NUM - 1) ?all : (i + 1) * chunk;
             pthread_create(&threads[i], NULL, PriorityQueue::fill_range, task);
             // if (ret != 0) 
             // {
