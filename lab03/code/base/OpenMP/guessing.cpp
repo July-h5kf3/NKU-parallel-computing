@@ -1,5 +1,6 @@
 #include "PCFG.h"
 #include<pthread.h>
+#include<omp.h>
 using namespace std;
 typedef struct
 {
@@ -248,6 +249,25 @@ void PriorityQueue::Generate(PT pt)
         // 这个for循环就是你需要进行并行化的主要部分了，特别是在多线程&GPU编程任务中
         // 可以看到，这个循环本质上就是把模型中一个segment的所有value，赋值到PT中，形成一系列新的猜测
         // 这个过程是可以高度并行化的
+        omp_set_num_threads(THREAD_NUM);
+        #pragma omp parallel
+        {
+            vector<string> local_guesses;
+            #pragma omp for 
+            for (int i = 0; i < pt.max_indices[0]; i += 1)
+            {
+                string guess = a->ordered_values[i];
+                // cout << guess << endl;
+                //guesses.emplace_back(guess);
+                local_guesses.emplace_back(guess);
+                //total_guesses += 1;
+            }
+            #pragma omp critical
+            {
+                guesses.insert(guesses.end(),local_guesses.begin(),local_guesses.end());
+                total_guesses += local_guesses.size();
+            }
+        }
         // for (int i = 0; i < pt.max_indices[0]; i += 1)
         // {
         //     string guess = a->ordered_values[i];
@@ -255,29 +275,29 @@ void PriorityQueue::Generate(PT pt)
         //     guesses.emplace_back(guess);
         //     total_guesses += 1;
         // }
-        pthread_t threads[THREAD_NUM];
-        int all = pt.max_indices[0];
-        int chunk = all / THREAD_NUM;
-        //cout<<"chunk = "<<chunk<<endl;
-        for(int i = 0;i < THREAD_NUM;i++)
-        {
-            ThreadTask* task = new ThreadTask();
-            task->pre_terminal = "";
-            //cout<<"xxx"<<endl;
-            task->a = a;
-            task->self = this;
-            task->start_index = i * chunk;
-            task->end_index = (i == THREAD_NUM - 1) ? all : (i + 1) * chunk;
-            pthread_create(&threads[i], NULL, PriorityQueue::fill_range, task);
-            // if (ret != 0) 
-            // {
-            //     std::cerr << "Failed to create thread " << i << ", error: " << ret << std::endl;
-            // }
-        }
-        for(int i = 0;i < THREAD_NUM;i++)
-        {
-            pthread_join(threads[i],NULL);
-        }
+        // pthread_t threads[THREAD_NUM];
+        // int all = pt.max_indices[0];
+        // int chunk = all / THREAD_NUM;
+        // //cout<<"chunk = "<<chunk<<endl;
+        // for(int i = 0;i < THREAD_NUM;i++)
+        // {
+        //     ThreadTask* task = new ThreadTask();
+        //     task->pre_terminal = "";
+        //     //cout<<"xxx"<<endl;
+        //     task->a = a;
+        //     task->self = this;
+        //     task->start_index = i * chunk;
+        //     task->end_index = (i == THREAD_NUM - 1) ? all : (i + 1) * chunk;
+        //     pthread_create(&threads[i], NULL, PriorityQueue::fill_range, task);
+        //     // if (ret != 0) 
+        //     // {
+        //     //     std::cerr << "Failed to create thread " << i << ", error: " << ret << std::endl;
+        //     // }
+        // }
+        // for(int i = 0;i < THREAD_NUM;i++)
+        // {
+        //     pthread_join(threads[i],NULL);
+        // }
     }
     else
     {
@@ -326,6 +346,25 @@ void PriorityQueue::Generate(PT pt)
         // 这个for循环就是你需要进行并行化的主要部分了，特别是在多线程&GPU编程任务中
         // 可以看到，这个循环本质上就是把模型中一个segment的所有value，赋值到PT中，形成一系列新的猜测
         // 这个过程是可以高度并行化的
+        omp_set_num_threads(THREAD_NUM);
+        #pragma omp parallel
+        {
+            vector<string> local_guesses;
+            #pragma omp for 
+            for (int i = 0; i < pt.max_indices[pt.content.size() - 1]; i += 1)
+            {
+                string temp = guess + a->ordered_values[i];
+                // cout << guess << endl;
+                //guesses.emplace_back(guess);
+                local_guesses.emplace_back(temp);
+                //total_guesses += 1;
+            }
+            #pragma omp critical
+            {
+                guesses.insert(guesses.end(),local_guesses.begin(),local_guesses.end());
+                total_guesses += local_guesses.size();
+            }
+        }
     //    for (int i = 0; i < pt.max_indices[pt.content.size() - 1]; i += 1)
     //     {
     //         string temp = guess + a->ordered_values[i];
@@ -333,27 +372,27 @@ void PriorityQueue::Generate(PT pt)
     //         guesses.emplace_back(temp);
     //         total_guesses += 1;
     //     }
-        pthread_t threads[THREAD_NUM];
-        int all = pt.max_indices[pt.content.size() - 1];
-        int chunk = all / THREAD_NUM;
-        for(int i = 0;i < THREAD_NUM;i++)
-        {
-            ThreadTask* task = new ThreadTask();
-            // cout<<"guess = "<<guess<<endl;
-            task->pre_terminal = guess;
-            task->a = a;
-            task->self = this;
-            task->start_index = i * chunk;
-            task->end_index = (i == THREAD_NUM - 1) ?all : (i + 1) * chunk;
-            pthread_create(&threads[i], NULL, PriorityQueue::fill_range, task);
-            // if (ret != 0) 
-            // {
-            //     std::cerr << "Failed to create thread " << i << ", error: " << ret << std::endl;
-            // }
-        }
-        for(int i = 0;i < THREAD_NUM;i++)
-        {
-            pthread_join(threads[i],NULL);
-        }
+        // pthread_t threads[THREAD_NUM];
+        // int all = pt.max_indices[pt.content.size() - 1];
+        // int chunk = all / THREAD_NUM;
+        // for(int i = 0;i < THREAD_NUM;i++)
+        // {
+        //     ThreadTask* task = new ThreadTask();
+        //     // cout<<"guess = "<<guess<<endl;
+        //     task->pre_terminal = guess;
+        //     task->a = a;
+        //     task->self = this;
+        //     task->start_index = i * chunk;
+        //     task->end_index = (i == THREAD_NUM - 1) ?all : (i + 1) * chunk;
+        //     pthread_create(&threads[i], NULL, PriorityQueue::fill_range, task);
+        //     // if (ret != 0) 
+        //     // {
+        //     //     std::cerr << "Failed to create thread " << i << ", error: " << ret << std::endl;
+        //     // }
+        // }
+        // for(int i = 0;i < THREAD_NUM;i++)
+        // {
+        //     pthread_join(threads[i],NULL);
+        // }
     }
 }

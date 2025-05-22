@@ -146,7 +146,7 @@ public:
     pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;//这个是锁 因为有全局变量guesses 和 total_guesses所以要加锁不然会访问冲突
     // 模型作为成员，辅助猜测生成
     model m;
-
+    int THREAD_NUM;
     // 计算一个pt的概率
     void CalProb(PT &pt);
     static void* fill_range(void* arg);
