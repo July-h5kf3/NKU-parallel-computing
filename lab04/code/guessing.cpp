@@ -1,6 +1,89 @@
 #include "PCFG.h"
+#include <mpi.h>
+#include <vector>
+#include <string.h>
 using namespace std;
+#define MAX_RESULT_LEN 128
 
+void PriorityQueue::fill_preterminal(const std::string& base,segment* a,int num)
+{
+    int rank,size;
+    MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+    MPI_Comm_size(MPI_COMM_WORLD,&size);
+    vector<string> local_guesses;
+
+    if (num <= 0 || a == nullptr) 
+    {} 
+    else 
+    {
+        long long n_total = num;
+        long long start_idx = (long long)rank * n_total / size;
+        long long end_idx = (long long)(rank + 1) * n_total / size;
+
+        local_guesses.reserve(end_idx - start_idx);
+
+        for (long long i = start_idx; i < end_idx; ++i) 
+        {
+            local_guesses.emplace_back(base + a->ordered_values[i]);
+        }
+    }
+    //将每个进程的local_guesses链接
+    size_t total_local_len = 0;
+    for (const auto& s : local_guesses) 
+    {
+        total_local_len += s.length() + 1;
+    }
+    string concat_str;
+    if (total_local_len > 0) 
+    {
+        concat_str.reserve(total_local_len);
+        for (const auto& s : local_guesses) 
+        {
+            concat_str.append(s);
+            concat_str.push_back('\0');
+        }
+    }
+    //在主线程收集这些链接后的字符串大小
+    int local_size = concat_str.length();
+    vector<int> all_sizes;
+    if (rank == 0) 
+    {
+        all_sizes.resize(size);
+    }
+    MPI_Gather(&local_size, 1, MPI_INT, all_sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    //接受数据
+    vector<int> displacements;
+    vector<char> recv_buffer;
+    if (rank == 0) 
+    {
+        displacements.resize(size, 0);
+        size_t total_recv_size = 0;
+        for (int i = 0; i < size; ++i) 
+        {
+            displacements[i] = total_recv_size;
+            total_recv_size += all_sizes[i];
+        }
+        if (total_recv_size > 0) 
+        {
+            recv_buffer.resize(total_recv_size);
+        }
+    }
+    MPI_Gatherv(concat_str.data(), local_size, MPI_CHAR,
+    recv_buffer.data(), all_sizes.data(), displacements.data(),
+    MPI_CHAR, 0, MPI_COMM_WORLD);
+    //主进程解包缓冲区并将其添加到主'guesses'
+    if (rank == 0 && !recv_buffer.empty()) 
+    {
+        size_t current_pos = 0;
+        while (current_pos < recv_buffer.size()) 
+        {
+            string s(&recv_buffer[current_pos]);
+            guesses.emplace_back(std::move(s));
+            current_pos += guesses.back().length() + 1;
+        }
+    }
+}
 void PriorityQueue::CalProb(PT &pt)
 {
     // 计算PriorityQueue里面一个PT的流程如下：
@@ -91,12 +174,19 @@ void PriorityQueue::init()
 
 void PriorityQueue::PopNext()
 {
-
-    // 对优先队列最前面的PT，首先利用这个PT生成一系列猜测
-    Generate(priority.front());
-
-    // 然后需要根据即将出队的PT，生成一系列新的PT
-    vector<PT> new_pts = priority.front().NewPTs();
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    PT pt_for_generate;
+    if (rank == 0)
+    {
+        // 主进程从其队列的前端获取真实的PT。
+        if (priority.empty()) return;
+        pt_for_generate = priority.front();
+    }
+    Generate(pt_for_generate);
+    if(rank == 0)
+    {
+        vector<PT> new_pts = priority.front().NewPTs();
     for (PT pt : new_pts)
     {
         // 计算概率
@@ -129,6 +219,8 @@ void PriorityQueue::PopNext()
 
     // 现在队首的PT善后工作已经结束，将其出队（删除）
     priority.erase(priority.begin());
+    // 然后需要根据即将出队的PT，生成一系列新的PT
+    }
 }
 
 // 这个函数你就算看不懂，对并行算法的实现影响也不大
@@ -181,93 +273,73 @@ vector<PT> PT::NewPTs()
 // 尽量看懂，然后进行并行实现
 void PriorityQueue::Generate(PT pt)
 {
-    // 计算PT的概率，这里主要是给PT的概率进行初始化
-    CalProb(pt);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    // 对于只有一个segment的PT，直接遍历生成其中的所有value即可
-    if (pt.content.size() == 1)
+    string guess;
+    long long broadcast_data[3];
+    
+    if (rank == 0) 
     {
-        // 指向最后一个segment的指针，这个指针实际指向模型中的统计数据
-        segment *a;
-        // 在模型中定位到这个segment
-        if (pt.content[0].type == 1)
+        if (!pt.content.empty()) 
         {
-            a = &m.letters[m.FindLetter(pt.content[0])];
+            //计算前缀
+            if (pt.content.size() > 1) 
+            {
+                for (size_t i = 0; i < pt.content.size() - 1; ++i) 
+                {
+                    int seg_idx_val = pt.curr_indices[i];
+                    if (pt.content[i].type == 1) guess += m.letters[m.FindLetter(pt.content[i])].ordered_values[seg_idx_val];
+                    if (pt.content[i].type == 2) guess += m.digits[m.FindDigit(pt.content[i])].ordered_values[seg_idx_val];
+                    if (pt.content[i].type == 3) guess += m.symbols[m.FindSymbol(pt.content[i])].ordered_values[seg_idx_val];
+                }
+            }
+            // 准备最后一个segment的信息
+            int last_idx = pt.content.size() - 1;
+            const segment& last_seg = pt.content[last_idx];
+
+            broadcast_data[0] = last_seg.type;
+            broadcast_data[2] = pt.max_indices[last_idx];
+
+            if(last_seg.type == 1) broadcast_data[1] = m.FindLetter(last_seg);
+            else if(last_seg.type == 2) broadcast_data[1] = m.FindDigit(last_seg);
+            else if(last_seg.type == 3) broadcast_data[1] = m.FindSymbol(last_seg);
+            else broadcast_data[1] = -1;
         }
-        if (pt.content[0].type == 2)
+        else
         {
-            a = &m.digits[m.FindDigit(pt.content[0])];
-        }
-        if (pt.content[0].type == 3)
-        {
-            a = &m.symbols[m.FindSymbol(pt.content[0])];
+            broadcast_data[0] = -1; // 标记为无效PT
         }
         
-        // Multi-thread TODO：
-        // 这个for循环就是你需要进行并行化的主要部分了，特别是在多线程&GPU编程任务中
-        // 可以看到，这个循环本质上就是把模型中一个segment的所有value，赋值到PT中，形成一系列新的猜测
-        // 这个过程是可以高度并行化的
-        for (int i = 0; i < pt.max_indices[0]; i += 1)
-        {
-            string guess = a->ordered_values[i];
-            // cout << guess << endl;
-            guesses.emplace_back(guess);
-            total_guesses += 1;
-        }
     }
-    else
-    {
-        string guess;
-        int seg_idx = 0;
-        // 这个for循环的作用：给当前PT的所有segment赋予实际的值（最后一个segment除外）
-        // segment值根据curr_indices中对应的值加以确定
-        // 这个for循环你看不懂也没太大问题，并行算法不涉及这里的加速
-        for (int idx : pt.curr_indices)
-        {
-            if (pt.content[seg_idx].type == 1)
-            {
-                guess += m.letters[m.FindLetter(pt.content[seg_idx])].ordered_values[idx];
-            }
-            if (pt.content[seg_idx].type == 2)
-            {
-                guess += m.digits[m.FindDigit(pt.content[seg_idx])].ordered_values[idx];
-            }
-            if (pt.content[seg_idx].type == 3)
-            {
-                guess += m.symbols[m.FindSymbol(pt.content[seg_idx])].ordered_values[idx];
-            }
-            seg_idx += 1;
-            if (seg_idx == pt.content.size() - 1)
-            {
-                break;
-            }
-        }
+    MPI_Bcast(broadcast_data, 3, MPI_LONG_LONG, 0, MPI_COMM_WORLD);
 
-        // 指向最后一个segment的指针，这个指针实际指向模型中的统计数据
-        segment *a;
-        if (pt.content[pt.content.size() - 1].type == 1)
-        {
-            a = &m.letters[m.FindLetter(pt.content[pt.content.size() - 1])];
-        }
-        if (pt.content[pt.content.size() - 1].type == 2)
-        {
-            a = &m.digits[m.FindDigit(pt.content[pt.content.size() - 1])];
-        }
-        if (pt.content[pt.content.size() - 1].type == 3)
-        {
-            a = &m.symbols[m.FindSymbol(pt.content[pt.content.size() - 1])];
-        }
-        
-        // Multi-thread TODO：
-        // 这个for循环就是你需要进行并行化的主要部分了，特别是在多线程&GPU编程任务中
-        // 可以看到，这个循环本质上就是把模型中一个segment的所有value，赋值到PT中，形成一系列新的猜测
-        // 这个过程是可以高度并行化的
-        for (int i = 0; i < pt.max_indices[pt.content.size() - 1]; i += 1)
-        {
-            string temp = guess + a->ordered_values[i];
-            // cout << temp << endl;
-            guesses.emplace_back(temp);
-            total_guesses += 1;
-        }
+    if (broadcast_data[0] == -1) 
+    {
+        return;
     }
+
+    int guess_len = (rank == 0) ? guess.length() : 0;
+    MPI_Bcast(&guess_len, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    vector<char> guess_buffer(guess_len + 1);
+    if (rank == 0) 
+    {
+        strcpy(guess_buffer.data(), guess.c_str());
+    }
+    MPI_Bcast(guess_buffer.data(), guess_len + 1, MPI_CHAR, 0, MPI_COMM_WORLD);
+    guess = string(guess_buffer.data());
+
+    int last_seg_type = broadcast_data[0];
+    int index_in_model = broadcast_data[1];
+    int loop_bound = broadcast_data[2];
+   
+    segment* a;
+    if(index_in_model != - 1)
+    {
+        if (last_seg_type == 1)       a = &m.letters[index_in_model];
+        else if (last_seg_type == 2)  a = &m.digits[index_in_model];
+        else if (last_seg_type == 3)  a = &m.symbols[index_in_model];
+    }
+    fill_preterminal(guess, a, loop_bound);
 }

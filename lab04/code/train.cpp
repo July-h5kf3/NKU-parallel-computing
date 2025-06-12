@@ -1,6 +1,7 @@
 #include "PCFG.h"
 #include <fstream>
 #include <cctype>
+#include <mpi.h>
 #include <algorithm>
 
 // 这个文件里面的各函数你都不需要完全理解，甚至根本不需要看
@@ -21,17 +22,23 @@
 // 训练的wrapper，实际上就是读取训练集
 void model::train(string path)
 {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     string pw;
     ifstream train_set(path);
     int lines = 0;
-    cout<<"Training..."<<endl;
-    cout<<"Training phase 1: reading and parsing passwords..."<<endl;
+    if(rank == 0)
+    {
+        cout<<"Training..."<<endl;
+        cout<<"Training phase 1: reading and parsing passwords..."<<endl;
+    }
+    
     while (train_set >> pw)
     {
         lines += 1;
         if (lines % 10000 == 0)
-        {
-            cout <<"Lines processed: "<< lines << endl;
+        {   
+            if(rank == 0)cout <<"Lines processed: "<< lines << endl;
             // 在这里更改读取的训练集口令上限
             if (lines > 3000000)
             {
@@ -472,6 +479,9 @@ bool compareByPretermProb(const PT& a, const PT& b) {
 
 void model::order()
 {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if(rank == 0)
     cout << "Training phase 2: Ordering segment values and PTs..." << endl;
     for (PT pt : preterminals)
     {
@@ -479,8 +489,10 @@ void model::order()
         ordered_pts.emplace_back(pt);
     }
     bool swapped;
+    if(rank == 0)
     cout << "total pts" << ordered_pts.size() << endl;
     std::sort(ordered_pts.begin(), ordered_pts.end(), compareByPretermProb);
+    if(rank == 0)
     cout << "Ordering letters" << endl;
     // cout << "total letters" << endl;
     for (int i = 0; i < letters.size(); i += 1)
@@ -488,12 +500,14 @@ void model::order()
         // cout << i << endl;
         letters[i].order();
     }
+    if(rank == 0)
     cout << "Ordering digits" << endl;
     // cout << "total letters" << endl;
     for (int i = 0; i < digits.size(); i += 1)
     {
         digits[i].order();
     }
+    if(rank == 0)
     cout << "ordering symbols" << endl;
     // cout << "total letters" << endl;
     for (int i = 0; i < symbols.size(); i += 1)

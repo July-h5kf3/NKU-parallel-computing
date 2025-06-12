@@ -2,7 +2,7 @@
 #include <iomanip>
 #include <assert.h>
 #include <chrono>
-//#include<arm_neon.h>
+#include<arm_neon.h>
 
 using namespace std;
 using namespace chrono;
