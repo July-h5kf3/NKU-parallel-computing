@@ -188,7 +188,6 @@ void PriorityQueue::PopNext()
         vector<PT> pt_for_generate;
         // 主进程从其队列的前端获取真实的PT。
        batch_size = min((int)priority.size(),size);
-    //    cout<<batch_size<<endl;
        for(int i = 0;i < batch_size;i++)
        {
         PT now_pt = priority.front();
@@ -198,29 +197,6 @@ void PriorityQueue::PopNext()
         for(PT insert_pt : new_pts)
         {
             CalProb(insert_pt);
-            // for(auto iter = priority.begin(); iter != priority.end();iter++)
-            // {
-            //     // 对于非队首和队尾的特殊情况
-            //     if (iter != priority.end() - 1 && iter != priority.begin())
-            //     {
-            //         // 判定概率
-            //         if (insert_pt.prob <= iter->prob && insert_pt.prob > (iter + 1)->prob)
-            //         {
-            //             priority.emplace(iter + 1, insert_pt);
-            //             break;
-            //         }
-            //     }
-            //     if (iter == priority.end() - 1)
-            //     {
-            //         priority.emplace_back(insert_pt);
-            //         break;
-            //     }
-            //     if (iter == priority.begin() && iter->prob < insert_pt.prob)
-            //     {
-            //         priority.emplace(iter, insert_pt);
-            //         break;
-            //     }
-            // }
             priority.push_back(insert_pt);
         }
         priority.erase(priority.begin());
